@@ -254,24 +254,6 @@ impl RIBEntry {
 
 }
 
-fn interpret_bgp_attributes(stream: &Read, attributes: &mut Vec<BGPAttribute>) -> Result<Vec<BGPAttribute>, Error> {
-    let flag = stream.read_u8()?;
-    let type_code = stream.read_u8()?;
-
-    let mut size;
-    if flag&0x10 != 0 {
-        size = stream.read_u16::<BigEndian>()?;
-    } else {
-        size = stream.read_u8()? as u16;
-    }
-
-    let mut value: Vec<u8> = vec![0; size as usize];
-    stream.read_exact(&mut value);
-    attributes.push(BGPAttribute{flag: flag, type_code: type_code, value: value});
-
-    interpret_bgp_attributes(stream, attributes)
-}
-
 /// Represents a collection of routes for a specific IP prefix.
 #[derive(Debug)]
 #[allow(non_camel_case_types)]
