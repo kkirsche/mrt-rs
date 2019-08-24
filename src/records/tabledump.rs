@@ -211,7 +211,7 @@ pub struct BGPAttribute {
 }
 
 #[derive(Debug)]
-enum BGPAttrType {
+pub enum BGPAttrType {
     Origin,
     ASPath,
     IP,
