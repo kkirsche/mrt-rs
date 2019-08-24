@@ -238,6 +238,7 @@ impl RIBEntry {
             }
 
             size = size-1;
+            println!("pos: {} size: {} byte_array_len: {}", pos, size, attribute_bytes.len());
             let value = attribute_bytes[pos..pos+size as usize].to_vec();
 
             attributes.push(BGPAttribute{flag: flag, type_code: type_code, value: value});
