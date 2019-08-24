@@ -1,8 +1,7 @@
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Error, Read};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-use std::mem;
-
+use std::collections::VecDeque;
 use crate::Header;
 use crate::AFI;
 
@@ -207,44 +206,53 @@ pub struct RIBEntry {
 #[derive(Debug)]
 pub struct BGPAttribute {
     pub flag: u8,
-    pub type_code: u8,
+    pub type_code: BGPAttrType,
     pub value: Vec<u8>,
 }
 
+enum BGPAttrType {
+    Origin,
+    ASPath,
+    IP,
+    Something,
+    Else,
+    Zero,
+    Aggregator,
+    CommunityAttrs,
+    IP2,
+    ClusterList,
+}
+
 impl RIBEntry {
-    fn parse(stream: &mut Read) -> Result<RIBEntry, Error> {
+    fn parse(stream: &mut dyn Read) -> Result<RIBEntry, Error> {
         let peer_index = stream.read_u16::<BigEndian>()?;
         let originated_time = stream.read_u32::<BigEndian>()?;
         let attribute_length = stream.read_u16::<BigEndian>()?;
-
-        let attribute_bytes: Vec<u8> = vec![0; attribute_length as usize];
-        let attr_len = attribute_bytes.len();
-        let mut done = false;
-        let mut pos = 0;
+        let mut read_bytes = 0;
         let mut attributes = vec!();
-        while !done {
-            let flag = attribute_bytes[pos];
-            pos = pos + 1;
-            let type_code = attribute_bytes[pos];
-            pos = pos + 1;
 
-            let mut size;
-            if flag&0x10 != 0 {
-                size = u16::from_be_bytes([attribute_bytes[pos], attribute_bytes[pos+1]]);
-                pos = pos + 2;
-            } else {
-                size = attribute_bytes[pos] as u16;
-                pos = pos + 1;
+        while attribute_length > read_bytes {
+            let flag = stream.read_u8()?;
+            let type_code = stream.read_u8()?;
+            read_bytes = read_bytes + 2;
+
+            match type_code {
+                1 => {
+                    let value = stream.read_u8()?;
+                    read_bytes = read_bytes + 1;
+                    attributes.push(BGPAttribute{flag: flag, type_code: BGPAttrType::Origin, value: vec!(value)});
+                },
+                2 => {
+                    let size = stream.read_u8()?;
+                    read_bytes = read_bytes + 1;
+                    let mut value = Vec::with_capacity(size as usize);
+                    stream.read_exact(&mut value)?;
+                    read_bytes = read_bytes + size as u16;
+                    attributes.push(BGPAttribute{flag: flag, type_code: BGPAttrType::ASPath, value: value});
+                }
+                _ => continue,
             }
 
-            size = size-1;
-            println!("pos: {} size: {} byte_array_len: {}", pos, size, attribute_bytes.len());
-            let value = attribute_bytes[pos..pos+size as usize].to_vec();
-
-            attributes.push(BGPAttribute{flag: flag, type_code: type_code, value: value});
-            if pos >= attr_len {
-                done = true
-            }
         }
 
         Ok(RIBEntry {
@@ -372,32 +380,36 @@ pub struct RIBEntryAddPath {
 }
 
 impl RIBEntryAddPath {
-    fn parse(stream: &mut Read) -> Result<RIBEntryAddPath, Error> {
+    fn parse(stream: &mut dyn Read) -> Result<RIBEntryAddPath, Error> {
         let peer_index = stream.read_u16::<BigEndian>()?;
         let originated_time = stream.read_u32::<BigEndian>()?;
         let path_identifier = stream.read_u32::<BigEndian>()?;
         let attribute_length = stream.read_u16::<BigEndian>()?;
-        let mut remaining_length = attribute_length.clone();
+        let mut read_bytes = 0;
         let mut attributes = vec!();
 
-        while remaining_length > 0 {
-            let attr_flag = stream.read_u8()?;
+        while attribute_length > read_bytes {
+            let flag = stream.read_u8()?;
             let type_code = stream.read_u8()?;
-            remaining_length = remaining_length - 2;
-            let mut size: u16 = 0;
-            if attr_flag&0x10 != 0 {
-                size = stream.read_u16::<BigEndian>()?;
-                remaining_length = remaining_length - 2;
-            } else {
-                size = stream.read_u8()? as u16;
-                remaining_length = remaining_length - 1;
+            read_bytes = read_bytes + 2;
+
+            match type_code {
+                1 => {
+                    let value = stream.read_u8()?;
+                    read_bytes = read_bytes + 1;
+                    attributes.push(BGPAttribute{flag: flag, type_code: BGPAttrType::Origin, value: vec!(value)});
+                },
+                2 => {
+                    let size = stream.read_u8()?;
+                    read_bytes = read_bytes + 1;
+                    let mut value = Vec::with_capacity(size as usize);
+                    stream.read_exact(&mut value)?;
+                    read_bytes = read_bytes + size as u16;
+                    attributes.push(BGPAttribute{flag: flag, type_code: BGPAttrType::ASPath, value: value});
+                }
+                _ => continue,
             }
 
-
-            let mut value = Vec::with_capacity(size as usize);
-            stream.read_exact(&mut value)?;
-            remaining_length = remaining_length - size;
-            attributes.push(BGPAttribute{flag: attr_flag, type_code: type_code, value: value});
         }
 
         Ok(RIBEntryAddPath {
