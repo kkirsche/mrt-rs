@@ -222,21 +222,20 @@ impl RIBEntry {
         println!("starting length: {:?}", remaining_length);
         while remaining_length > 0 {
             let attr_flag = stream.read_u8()?;
-            remaining_length = remaining_length - 1;
+            remaining_length = remaining_length - mem::size_of_val(&attr_flag) as u16;
             let type_code = stream.read_u8()?;
-            remaining_length = remaining_length - 1;
+            remaining_length = remaining_length - mem::size_of_val(&type_code) as u16;
             let mut size: u16 = 0;
             if attr_flag&0x10 != 0 {
                 size = stream.read_u16::<BigEndian>()?;
-                remaining_length = remaining_length - 2;
             } else {
                 size = stream.read_u8()? as u16;
-                remaining_length = remaining_length - 1;
             }
+            remaining_length = remaining_length - mem::size_of_val(&size) as u16;
 
             let mut value = Vec::with_capacity(size as usize);
             stream.read_exact(&mut value)?;
-            remaining_length = remaining_length - size;
+            remaining_length = remaining_length - mem::size_of_val(&value) as u16;
             attributes.push(BGPAttribute{flag: attr_flag, type_code: type_code, value: value});
             println!("remaining length: {:?}", remaining_length);
         }
