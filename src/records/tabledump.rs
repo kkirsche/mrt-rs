@@ -200,7 +200,14 @@ pub struct RIBEntry {
     pub originated_time: u32,
 
     /// The BGP Path attributes associated with this route.
-    pub attributes: Vec<u8>,
+    pub attributes: Vec<BGPAttribute>,
+}
+
+#[derive(Debug)]
+pub struct BGPAttribute {
+    pub flag: u8,
+    pub type_code: u8,
+    pub value: Vec<u8>,
 }
 
 impl RIBEntry {
@@ -208,9 +215,28 @@ impl RIBEntry {
         let peer_index = stream.read_u16::<BigEndian>()?;
         let originated_time = stream.read_u32::<BigEndian>()?;
         let attribute_length = stream.read_u16::<BigEndian>()?;
+        let mut remaining_length = attribute_length.clone();
+        let mut attributes = vec!();
 
-        let mut attributes: Vec<u8> = vec![0; attribute_length as usize];
-        stream.read_exact(&mut attributes)?;
+        while remaining_length > 0 {
+            let attr_flag = stream.read_u8()?;
+            let type_code = stream.read_u8()?;
+            remaining_length = remaining_length - 2;
+            let mut size: u16 = 0;
+            if attr_flag&0x10 != 0 {
+                size = stream.read_u16::<BigEndian>()?;
+                remaining_length = remaining_length - 2;
+            } else {
+                size = stream.read_u8()? as u16;
+                remaining_length = remaining_length - 1;
+            }
+
+
+            let mut value = Vec::with_capacity(size as usize);
+            stream.read_exact(&mut value)?;
+            remaining_length = remaining_length - size;
+            attributes.push(BGPAttribute{flag: attr_flag, type_code: type_code, value: value});
+        }
 
         Ok(RIBEntry {
             peer_index,
@@ -332,7 +358,7 @@ pub struct RIBEntryAddPath {
     pub path_identifier: u32,
 
     /// The BGP Path attributes associated with this route.
-    pub attributes: Vec<u8>,
+    pub attributes: Vec<BGPAttribute>,
 }
 
 impl RIBEntryAddPath {
