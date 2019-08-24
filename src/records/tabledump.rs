@@ -237,7 +237,7 @@ impl RIBEntry {
                 pos = pos + 1;
             }
 
-            let value = attribute_bytes[pos..pos+size as usize].to_vec();
+            let value = attribute_bytes[pos..pos+size-1 as usize].to_vec();
 
             attributes.push(BGPAttribute{flag: flag, type_code: type_code, value: value});
             if pos >= attr_len {
