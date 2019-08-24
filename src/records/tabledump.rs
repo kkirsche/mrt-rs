@@ -1,6 +1,7 @@
 use byteorder::{BigEndian, ReadBytesExt};
 use std::io::{Error, Read};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::mem;
 
 use crate::Header;
 use crate::AFI;
@@ -218,10 +219,12 @@ impl RIBEntry {
         let mut remaining_length = attribute_length.clone();
         let mut attributes = vec!();
 
+        println!("starting length: {:?}", remaining_length);
         while remaining_length > 0 {
             let attr_flag = stream.read_u8()?;
+            remaining_length = remaining_length - 1;
             let type_code = stream.read_u8()?;
-            remaining_length = remaining_length - 2;
+            remaining_length = remaining_length - 1;
             let mut size: u16 = 0;
             if attr_flag&0x10 != 0 {
                 size = stream.read_u16::<BigEndian>()?;
@@ -231,11 +234,11 @@ impl RIBEntry {
                 remaining_length = remaining_length - 1;
             }
 
-
             let mut value = Vec::with_capacity(size as usize);
             stream.read_exact(&mut value)?;
             remaining_length = remaining_length - size;
             attributes.push(BGPAttribute{flag: attr_flag, type_code: type_code, value: value});
+            println!("remaining length: {:?}", remaining_length);
         }
 
         Ok(RIBEntry {
