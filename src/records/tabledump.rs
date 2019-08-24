@@ -228,7 +228,7 @@ impl RIBEntry {
             let type_code = attribute_bytes[pos];
             pos = pos + 1;
 
-            let size;
+            let mut size;
             if flag&0x10 != 0 {
                 size = u16::from_be_bytes([attribute_bytes[pos], attribute_bytes[pos+1]]);
                 pos = pos + 2;
@@ -237,7 +237,8 @@ impl RIBEntry {
                 pos = pos + 1;
             }
 
-            let value = attribute_bytes[pos..pos+size-1 as usize].to_vec();
+            size = size-1;
+            let value = attribute_bytes[pos..pos+size as usize].to_vec();
 
             attributes.push(BGPAttribute{flag: flag, type_code: type_code, value: value});
             if pos >= attr_len {
