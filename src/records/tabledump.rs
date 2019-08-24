@@ -210,6 +210,7 @@ pub struct BGPAttribute {
     pub value: Vec<u8>,
 }
 
+#[derive(Debug)]
 enum BGPAttrType {
     Origin,
     ASPath,
