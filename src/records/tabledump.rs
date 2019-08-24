@@ -216,28 +216,33 @@ impl RIBEntry {
         let peer_index = stream.read_u16::<BigEndian>()?;
         let originated_time = stream.read_u32::<BigEndian>()?;
         let attribute_length = stream.read_u16::<BigEndian>()?;
-        let mut remaining_length = attribute_length.clone();
+
+        let attribute_bytes: Vec<u8> = vec![0; attribute_length as usize];
+        let attr_len = attribute_bytes.len();
+        let mut done = false;
+        let mut pos = 0;
         let mut attributes = vec!();
+        while !done {
+            let flag = attribute_bytes[pos];
+            pos = pos + 1;
+            let type_code = attribute_bytes[pos];
+            pos = pos + 1;
 
-        println!("starting length: {:?}", remaining_length);
-        while remaining_length > 0 {
-            let attr_flag = stream.read_u8()?;
-            remaining_length = remaining_length - mem::size_of_val(&attr_flag) as u16;
-            let type_code = stream.read_u8()?;
-            remaining_length = remaining_length - mem::size_of_val(&type_code) as u16;
-            let mut size: u16 = 0;
-            if attr_flag&0x10 != 0 {
-                size = stream.read_u16::<BigEndian>()?;
+            let size;
+            if flag&0x10 != 0 {
+                size = u16::from_be_bytes([attribute_bytes[pos], attribute_bytes[pos+1]]);
+                pos = pos + 2;
             } else {
-                size = stream.read_u8()? as u16;
+                size = attribute_bytes[pos] as u16;
+                pos = pos + 1;
             }
-            remaining_length = remaining_length - mem::size_of_val(&size) as u16;
 
-            let mut value = Vec::with_capacity(size as usize);
-            stream.read_exact(&mut value)?;
-            remaining_length = remaining_length - mem::size_of_val(&value) as u16;
-            attributes.push(BGPAttribute{flag: attr_flag, type_code: type_code, value: value});
-            println!("remaining length: {:?}", remaining_length);
+            let value = attribute_bytes[pos..pos+size as usize].to_vec();
+
+            attributes.push(BGPAttribute{flag: flag, type_code: type_code, value: value});
+            if pos >= attr_len {
+                done = true
+            }
         }
 
         Ok(RIBEntry {
@@ -246,6 +251,25 @@ impl RIBEntry {
             attributes,
         })
     }
+
+}
+
+fn interpret_bgp_attributes(stream: &Read, attributes: &mut Vec<BGPAttribute>) -> Result<Vec<BGPAttribute>, Error> {
+    let flag = stream.read_u8()?;
+    let type_code = stream.read_u8()?;
+
+    let mut size;
+    if flag&0x10 != 0 {
+        size = stream.read_u16::<BigEndian>()?;
+    } else {
+        size = stream.read_u8()? as u16;
+    }
+
+    let mut value: Vec<u8> = vec![0; size as usize];
+    stream.read_exact(&mut value);
+    attributes.push(BGPAttribute{flag: flag, type_code: type_code, value: value});
+
+    interpret_bgp_attributes(stream, attributes)
 }
 
 /// Represents a collection of routes for a specific IP prefix.
